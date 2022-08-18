@@ -39,6 +39,9 @@ flowchart TD
   end
   elasticsearch ---- H{Kibana};
 ```
+<img width="2559" alt="Screen Shot 2021-03-26 at 12 01 44 PM (1)" src="https://user-images.githubusercontent.com/37888437/185492943-6eb2756b-53dd-4849-b209-cea2f0f7089c.png">
+
+<img width="2556" alt="Screen Shot 2021-03-26 at 12 05 41 PM (1)" src="https://user-images.githubusercontent.com/37888437/185492977-4748ee75-5548-407e-8124-c1e3dea8db28.png">
 
 ### Usage
 
