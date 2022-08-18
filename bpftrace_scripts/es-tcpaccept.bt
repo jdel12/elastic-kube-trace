@@ -1,0 +1,67 @@
+#!/usr/bin/env bpftrace
+/*
+ * tcpaccept.bt Trace TCP accept()s
+ *              For Linux, uses bpftrace and eBPF.
+ *
+ * USAGE: tcpaccept.bt
+ *
+ * This is a bpftrace version of the bcc tool of the same name.
+ *
+ * This uses dynamic tracing of the kernel inet_csk_accept() socket function
+ * (from tcp_prot.accept), and will need to be modified to match kernel changes.
+
+ * Copyright (c) 2018 Dale Hamel.
+ * Licensed under the Apache License, Version 2.0 (the "License")
+
+ * 23-Nov-2018	Dale Hamel	created this.
+ */
+
+#include <linux/socket.h>
+#include <net/sock.h>
+
+BEGIN
+{
+}
+
+kretprobe:inet_csk_accept
+{
+	$sk = (struct sock *)retval;
+	$inet_family = $sk->__sk_common.skc_family;
+
+	if ($inet_family == AF_INET || $inet_family == AF_INET6) {
+		// initialize variable type:
+		$daddr = ntop(0);
+		$saddr = ntop(0);
+		if ($inet_family == AF_INET) {
+			$daddr = ntop($sk->__sk_common.skc_daddr);
+			$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+		} else {
+			$daddr = ntop(
+			    $sk->__sk_common.skc_v6_daddr.in6_u.u6_addr8);
+			$saddr = ntop(
+			    $sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr8);
+		}
+		$lport = $sk->__sk_common.skc_num;
+		$dport = $sk->__sk_common.skc_dport;
+		$qlen  = $sk->sk_ack_backlog;
+		$qmax  = $sk->sk_max_ack_backlog;
+
+		// Destination port is big endian, it must be flipped
+		$dport = ($dport >> 8) | (($dport << 8) & 0x00FF00);
+
+		
+		printf("tcpaccept,%d,%d,%d,%s,", pid, cgroup, cpu, comm);
+		printf("%s,%d,%s,%d,", $daddr, $dport, $saddr,
+		    $lport);
+		printf("%d,%d,0x%llx,", $qlen, $qmax, retval);
+		time("%s");
+		printf("\n");
+	}
+}
+
+
+/*
+ * tcpaccept,7160,1666,9,fluent-bit-gke-,::ffff:127.0.0.1,37232,::ffff:127.0.0.1,2021,4,1024,0xffffa0b636940940,1616625794
+ * tcpaccept,7879,1666,2,sidecar,::ffff:10.32.1.1,46516,::ffff:10.32.1.2,10054,0,1024,0xffffa0b4ed71c0c0,1616625796
+ * tcpaccept,2770749,1666,13,elasticsearch[e,::ffff:127.0.0.1,46294,::ffff:127.0.0.1,9200,0,1024,0xffffa0b7a778ca00,1616625797
+ */

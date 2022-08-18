@@ -1,0 +1,17 @@
+PUT _ingest/pipeline/ebpf_redirect
+{
+  "processors": [
+    {
+      "pipeline": {
+        "if": "ctx.message =~ /^tcpwin.*/",
+        "name": "es-tcpwin"
+      }
+    },
+    {
+      "pipeline": {
+        "if": "ctx.message =~ /^tcplife.*/",
+        "name": "es-tcplife"
+      }
+    }
+  ]
+}

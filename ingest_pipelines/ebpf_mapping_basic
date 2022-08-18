@@ -1,0 +1,64 @@
+
+{
+  "_doc": {
+    "properties": {
+      "ebpf.tcplife.rx_kb": {
+        "type": "integer"
+      },
+      "ebpf.tcpwin.socket": {
+        "type": "keyword"
+      },
+      "ebpf.timems": {
+        "type": "date"
+      },
+      "ebpf.tcpwin.cgroup": {
+        "type": "integer"
+      },
+      "ebpf.tcplife.rport": {
+        "type": "integer"
+      },
+      "ebpf.tcplife.tx_kb": {
+        "type": "integer"
+      },
+      "ebpf.tcpwin.sksndbuff": {
+        "type": "integer"
+      },
+      "ebpf.tcpwin.timeus": {
+        "type": "date"
+      },
+      "ebpf.tcplife.lport": {
+        "type": "integer"
+      },
+      "ebpf.tcplife.raddr": {
+        "type": "ip"
+      },
+      "ebpf.tcpwin.event": {
+        "type": "text"
+      },
+      "ebpf.tcpwin.snd_cwnd": {
+        "type": "integer"
+      },
+      "ebpf.tcplife.laddr": {
+        "index": true,
+        "store": false,
+        "type": "ip",
+        "doc_values": true
+      },
+      "ebpf.comm": {
+        "type": "text"
+      },
+      "ebpf.tcpwin.timestampns": {
+        "type": "date_nanos"
+      },
+      "ebpf.tcpwin.snd_ssthresh": {
+        "type": "integer"
+      },
+      "ebpf.pid": {
+        "type": "text"
+      },
+      "ebpf.tcpwin.wmemqueued": {
+        "type": "integer"
+      }
+    }
+  }
+}

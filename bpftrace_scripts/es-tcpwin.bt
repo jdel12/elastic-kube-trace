@@ -1,0 +1,64 @@
+#!/usr/local/bin/bpftrace
+/*
+ * tcpwin - Trace TCP send congestion window parameters.
+ *
+ * See BPF Performance Tools, Chapter 10, for an explanation of this tool.
+ *
+ * Copyright (c) 2019 Brendan Gregg.
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * This was originally created for the BPF Performance Tools book
+ * published by Addison Wesley. ISBN-13: 9780136554820
+ * When copying or porting, include this comment.
+ * ebpf.pipeline, ebpf.pid, ebpf.cgroup, ebpf.cpuid, ebpf.comm, ebpf.socket, ebpf.saddr, ebpf.sport, ebpf.daddr, ebpf.dport, ebpf.tx_kb, ebpf.rx_kb, ebpf.duration, ebpf.timems
+ * 20-Apr-2019  Brendan Gregg   Created this.
+ */
+
+#include <net/sock.h>
+#include <linux/tcp.h>
+
+BEGIN
+{
+
+}
+
+kprobe:tcp_rcv_established
+{
+	$sock = (struct sock *)arg0;
+	$tcps = (struct tcp_sock *)arg0; // see tcp_sk()
+// check the $pid vs pid diff if any -- see tcplife for more
+	$lport = $sock->__sk_common.skc_num;
+	$dport = $sock->__sk_common.skc_dport;
+	$dport = ($dport >> 8) | (($dport << 8) & 0xff00);
+	$family = $sock->__sk_common.skc_family;
+	$saddr = ntop(0);
+	$daddr = ntop(0);
+	if ($family == AF_INET) {
+		$saddr = ntop(AF_INET, $sock->__sk_common.skc_rcv_saddr);
+		$daddr = ntop(AF_INET, $sock->__sk_common.skc_daddr);
+	} else {
+		// AF_INET6
+		$saddr = ntop(AF_INET6,
+		    $sock->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr8);
+		$daddr = ntop(AF_INET6,
+		    $sock->__sk_common.skc_v6_daddr.in6_u.u6_addr8);
+	}
+
+	printf("tcpwin,%d,%d,%d,%s,0x%llx,%s,%d,%s,%d,%d,%d,%d,%d,", pid, cgroup, cpu,
+	    comm, arg0, $saddr, $lport, $daddr, $dport,
+	    $tcps->snd_cwnd, $tcps->snd_ssthresh, $sock->sk_sndbuf,
+	    $sock->sk_wmem_queued);
+	time("%s");
+	printf("\n");
+}
+
+
+
+ /* 
+  * tcpwin,4404,1666,8,containerd,0xffffa0b732f71bc0,::ffff:10.128.0.25,10250,::ffff:10.128.0.21,57778,25,21,87040,1428,1616539837
+  * tcpwin,0,1,8,swapper/8,0xffffa0b732f71bc0,::ffff:10.128.0.25,10250,::ffff:10.128.0.21,57778,25,21,87040,1435,1616539837
+  * 
+  * 
+  * ebpf.pipeline, ebpf.pid, ebpf.cgroup, ebpf.cpuid, ebpf.comm, ebpf.socket, ebpf.saddr, ebpf.sport, ebpf.daddr, ebpf.dport, ebpf.tcp.snd_cwnd, ebpf.tcp.snd_ssthresh, ebpf.sock.sk_sndbuf, ebpf.sock.sk_wmem_queued, ebpf.timems
+  *
+  * %{ebpf.pipeline->} %{ebpf.pid->} %{ebpf.cgroup->} %{ebpf.cpuid->} %{ebpf.comm->} %{ebpf.socket->} %{ebpf.saddr->} %{ebpf.sport->} %{ebpf.daddr->} %{ebpf.dport->} %{ebpf.tcp.snd_cwnd->} %{ebpf.tcp.snd_ssthresh->} %{ebpf.sock.sk_sndbuf->} %{ebpf.sock.sk_wmem_queued->} %{ebpf.timems->}
+  */ 

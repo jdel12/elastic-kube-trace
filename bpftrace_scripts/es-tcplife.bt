@@ -1,0 +1,108 @@
+#!/usr/bin/env bpftrace
+/*
+ * tcplife - Trace TCP session lifespans with connection details.
+ *
+ * See BPF Performance Tools, Chapter 10, for an explanation of this tool.
+ *
+ * Copyright (c) 2019 Brendan Gregg.
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * This was originally created for the BPF Performance Tools book
+ * published by Addison Wesley. ISBN-13: 9780136554820
+ * When copying or porting, include this comment.
+ *
+ * 17-Apr-2019  Brendan Gregg   Created this.
+ */
+
+#include <net/tcp_states.h>
+#include <net/sock.h>
+#include <linux/socket.h>
+#include <linux/tcp.h>
+
+BEGIN
+{
+}
+
+kprobe:tcp_set_state
+{
+	$sk = (struct sock *)arg0;
+	$newstate = arg1;
+
+	/*
+	 * This tool includes PID and comm context. From TCP this is best
+	 * effort, and may be wrong in some situations. It does this:
+	 * - record timestamp on any state < TCP_FIN_WAIT1
+	 *	note some state transitions may not be present via this kprobe
+	 * - cache task context on:
+	 *	TCP_SYN_SENT: tracing from client
+	 *	TCP_LAST_ACK: client-closed from server
+	 * - do output on TCP_CLOSE:
+	 *	fetch task context if cached, or use current task
+	 */
+
+	// record first timestamp seen for this socket
+	if ($newstate < TCP_FIN_WAIT1 && @birth[$sk] == 0) {
+		@birth[$sk] = nsecs;
+	}
+
+	// record PID & comm on SYN_SENT
+	if ($newstate == TCP_SYN_SENT || $newstate == TCP_LAST_ACK) {
+		@skpid[$sk] = pid;
+		@skcomm[$sk] = comm;
+	}
+
+	// session ended: calculate lifespan and print
+	if ($newstate == TCP_CLOSE && @birth[$sk]) {
+		$delta_ms = (nsecs - @birth[$sk]) / 1000000;
+		$lport = $sk->__sk_common.skc_num;
+		$dport = $sk->__sk_common.skc_dport;
+		$dport = ($dport >> 8) | (($dport << 8) & 0xff00);
+		$tp = (struct tcp_sock *)$sk;
+		$pid = @skpid[$sk];
+		$comm = @skcomm[$sk];
+		if ($comm == "") {
+			// not cached, use current task
+			$pid = pid;
+			$comm = comm;
+		}
+
+		$family = $sk->__sk_common.skc_family;
+		$saddr = ntop(0);
+		$daddr = ntop(0);
+		if ($family == AF_INET) {
+			$saddr = ntop(AF_INET, $sk->__sk_common.skc_rcv_saddr);
+			$daddr = ntop(AF_INET, $sk->__sk_common.skc_daddr);
+		} else {
+			// AF_INET6
+			$saddr = ntop(AF_INET6,
+			    $sk->__sk_common.skc_v6_rcv_saddr.in6_u.u6_addr8);
+			$daddr = ntop(AF_INET6,
+			    $sk->__sk_common.skc_v6_daddr.in6_u.u6_addr8);
+		}
+		printf("tcplife,%d,%d,%d,%s,0x%llx,%s,%d,%s,%d,", $pid, cgroup, cpu,
+		    $comm, arg0, $saddr, $lport, $daddr, $dport);
+		printf("%d,%d,%d,", $tp->bytes_acked / 1024,
+		    $tp->bytes_received / 1024, $delta_ms);
+		time("%s");
+		printf("\n");
+
+		delete(@birth[$sk]);
+		delete(@skpid[$sk]);
+		delete(@skcomm[$sk]);
+	}
+}
+
+END
+{
+	clear(@birth); clear(@skpid); clear(@skcomm);
+}
+
+ /* 
+  * tcplife,6767,1666,7,fluent-bit,0xffffa0b76b604600,127.0.0.1,44296,127.0.0.1,2021,3,0,3,1616538980
+  * tcplife,7160,1666,7,fluent-bit-gke-,0xffffa0b732f740c0,::ffff:127.0.0.1,2021,::ffff:127.0.0.1,44296,0,3,3,1616538980
+  * tcplife,2765973,1666,10,elasticsearch[e,0xffffa0b7a7911bc0,::ffff:127.0.0.1,9200,::ffff:127.0.0.1,56196,5,0,23,1616547744
+  * 
+  * ebpf.pipeline, ebpf.pid, ebpf.cgroup, ebpf.cpuid, ebpf.comm, ebpf.socket, ebpf.saddr, ebpf.sport, ebpf.daddr, ebpf.dport, ebpf.tx_kb, ebpf.rx_kb, ebpf.duration, ebpf.timems
+  *
+  * %{ebpf.pipeline->} %{ebpf.pid->} %{ebpf.cgroup->} %{ebpf.cpuid->} %{ebpf.comm->} %{ebpf.socket->} %{ebpf.saddr->} %{ebpf.sport->} %{ebpf.daddr->} %{ebpf.dport->} %{ebpf.tx_kb->} %{ebpf.rx_kb->} %{ebpf.duration->} %{ebpf.timems->}
+  * 
+  */ 

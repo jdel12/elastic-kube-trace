@@ -1,0 +1,51 @@
+PUT _ingest/pipeline/tcpwin_pipeline
+{
+    "processors" : [
+      {
+        "csv" : {
+          "tag" : "worksss",
+          "ignore_failure" : true,
+          "field" : "message",
+          "target_fields" : [
+            "ebpf.tcpwin.event","ebpf.tcpwin.socket","ebpf.tcpwin.timeus","ebpf.tcpwin.snd_cwnd","ebpf.tcpwin.snd_ssthresh","ebpf.tcpwin.sksndbuff","ebpf.tcpwin.wmemqueued","ebpf.tcpwin.cgroup","ebpf.tcpwin.timestampns"
+          ],
+          "trim" : false,
+          "empty_value" : "empty",
+          "ignore_missing" : true,
+          "on_failure" : [
+            {
+              "rename" : {
+                "field" : "tags",
+                "target_field" : "tags2",
+                "ignore_missing" : true,
+                "tag" : "failedcsv"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "on_failure" : [
+      {
+        "rename" : {
+          "ignore_failure" : true,
+          "field" : "message",
+          "target_field" : "message2",
+          "ignore_missing" : true
+        }
+      }
+    ]
+  }
+
+
+PUT _ingest/pipeline/tcplife_pipeline
+{
+    "processors" : [
+      {
+        "dissect" : {
+          "field" : "message",
+          "pattern" : "%{ebpf.pid->} %{ebpf.comm->} %{ebpf.tcplife.laddr->} %{ebpf.tcplife.lport->} %{ebpf.tcplife.raddr->} %{ebpf.tcplife.rport->} %{ebpf.tcplife.tx_kb->} %{ebpf.tcplife.rx_kb->} %{ebpf.timems->}"
+        }
+      }
+    ]
+  }
